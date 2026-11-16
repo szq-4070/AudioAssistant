@@ -1,0 +1,8 @@
+Package: com.szq.audioassistant
+Name: AudioAssistant
+Version: 0.1.0
+Architecture: iphoneos-arm
+Description: A minimal in-app audio assistant UI test tweak.
+Maintainer: local
+Author: local
+Section: Tweaks
