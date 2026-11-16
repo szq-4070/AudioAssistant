@@ -1,0 +1,94 @@
+
+name: Build AudioAssistant
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build iOS Tweak
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            fakeroot \
+            rsync \
+            curl \
+            perl \
+            zip \
+            git \
+            libxml2-utils \
+            dpkg-dev
+
+      - name: Install Theos
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Check project files
+        run: |
+          echo "Checking project structure..."
+          test -f Makefile || {
+            echo "ERROR: Makefile not found in repository root."
+            exit 1
+          }
+          test -f control || {
+            echo "ERROR: control file not found."
+            exit 1
+          }
+
+      - name: Build package
+        run: |
+          make clean
+          make package FINALPACKAGE=1
+
+      - name: Extract dylib
+        run: |
+          mkdir -p artifacts
+          
+          DEB_FILE=$(find packages -type f -name "*.deb" | head -n 1)
+
+          if [ -z "$DEB_FILE" ]; then
+            echo "ERROR: No Debian package was generated."
+            exit 1
+          fi
+
+          echo "Package generated: $DEB_FILE"
+          cp "$DEB_FILE" artifacts/
+
+          mkdir -p extracted
+          dpkg-deb -x "$DEB_FILE" extracted
+
+          find extracted -type f -name "*.dylib" \
+            -exec cp {} artifacts/ \;
+
+          if ! find artifacts -maxdepth 1 -type f -name "*.dylib" | grep -q .; then
+            echo "ERROR: No dylib found inside the package."
+            echo "Please check the Theos Makefile and package layout."
+            exit 1
+          fi
+
+          echo "Build output:"
+          ls -lh artifacts/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AudioAssistant-Build
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
